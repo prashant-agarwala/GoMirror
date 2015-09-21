@@ -24,9 +24,9 @@ func retrieve(uri string){
         os.Exit(1)
     }
     dir_path := parsed_url.Host+parsed_url.Path
-    err := os.MkdirAll(dir_path, 0777)
+    dir := os.MkdirAll(dir_path, 0777)
 
-    if(err != nil){
+    if(dir != nil){
         fmt.Println("Directory Create Error: ",dir)
         os.Exit(1)
     }
@@ -72,7 +72,7 @@ func main(){
     args := flag.Args()
 
     if(len(args)<1){
-        fmt.Println("Specify a start page")
+        fmt.Println("Specify a start url")
         os.Exit(1)
      }
     retrieve(args[0])
