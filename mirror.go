@@ -1,80 +1,79 @@
 package main
 
 import (
-  "fmt"
-  "net/http"    
-  "io"
-  "golang.org/x/net/html"
-  "strings"
-  "os"
-  "net/url"
-) 
+    "fmt"
+    "flag"
+    "os"
+    "net/http"
+    "net/url"
+    "io"
+    "golang.org/x/net/html"
+)
 
-func main() {
-//  baseurl := "https://www.google.com"
-baseurl := "https://library.snu.ac.kr/sites/default/files/library-brochure/leading_the_way_2015.pdf"
-  resp, err := http.Get(baseurl)
-  //defer resp.Body.Close()
-  if (err!=nil){                                                  
-    fmt.Println("http transport error is:", err)
-  }else
-  { 
-    u,_ := url.Parse(baseurl)   
-    os.MkdirAll(u.Path,0777)
-    w,_ := os.Create(baseurl)
+func retrieve(uri string){
 
-   // body, err := ioutil.ReadAll(resp.Body)
-    b :=io.TeeReader(resp.Body, w)
-    ct := resp.Header["Content-Type"][0]
-    fmt.Println(ct)
-    if (err == nil){                                              
-     // fmt.Println("size", (string(body)))
-      /*b := resp.Body
-	body, err := ioutil.ReadAll(b)
-	if (err!=nil){                                                  
-	    fmt.Println("http transport error is:", err)
-	  }
-	fmt.Println("size", (string(body)))*/
-      page := html.NewTokenizer(b)
-      fmt.Println("page", page)
-      totalCount := 0
-      startTag := 0
-      links := 0
-      inLinks := 0
-      
-for {
-    tokenType := page.Next()
-    //fmt.Println("type", tokenType)
-    totalCount = totalCount + 1
-    if tokenType == html.ErrorToken {
-      break;
+    parsed_url, err := url.Parse(uri)
+    if(err != nil){
+      fmt.Println("Url Parsing Error: ",err)
+      os.Exit(1)
     }
-    if tokenType == html.StartTagToken {
-      startTag = startTag + 1
-      token := page.Token()
-      if(token.Data == "a"){
-        links += 1 
-	for _, a := range token.Attr {
-	    if a.Key == "href" {
-		fmt.Println(a.Val)
-              if(strings.Index(a.Val, url) == 0){
-               inLinks += 1
-              // fmt.Println(a.Val);
-              }
-	      break
-	    }
-	}
+    resp, err := http.Get(uri)
 
-
-
-      }
+    if(err != nil){
+        fmt.Println("Http Transport Error: ",err)
+        os.Exit(1)
     }
-}
-fmt.Println("totalCount",totalCount);
-fmt.Println("startTag",startTag);
-fmt.Println("total links",links);
-fmt.Println("total internal links",inLinks);
+    dir_path := parsed_url.Host+parsed_url.Path
+    dir := os.MkdirAll(dir_path, 0777)
+
+    if(dir != nil){
+        fmt.Println("Directory Create Error: ",dir)
+        os.Exit(1)
     }
-  }
+
+    fileWriter, err := os.Create(dir_path+"file.txt")
+
+    if(err != nil){
+        fmt.Println("File Open Error: ",err)
+        os.Exit(1)
+    }
+
+    resp_reader := io.TeeReader(resp.Body, fileWriter)
+
+    z := html.NewTokenizer(resp_reader)
+    countLinks := 0
+    for{
+        tt := z.Next();
+        switch{
+            case tt==html.ErrorToken:
+                fmt.Println("Total number of links: ", countLinks)
+                return
+            case tt==html.StartTagToken:
+                t := z.Token()
+
+                if t.Data == "a"{
+                    countLinks++
+                    for _,a := range t.Attr{
+                        if a.Key == "href"{
+                            fmt.Println("Link: ", a.Val)
+                            break;
+                        }
+
+                    }
+
+                }
+        }
+    }
+
 }
 
+func main(){
+    flag.Parse()
+    args := flag.Args()
+
+    if(len(args)<1){
+        fmt.Println("Specify a start page")
+        os.Exit(1)
+     }
+    retrieve(args[0])
+}
