@@ -10,6 +10,7 @@ import (
     "golang.org/x/net/html"
     "strings"
     "path/filepath"
+    "time"
 )
 
 func createPaths (full_path string) io.Writer{
@@ -48,14 +49,16 @@ func generatelinks (resp_reader io.Reader, uri string, ch chan string){
               return
           case tt==html.StartTagToken:
               t := z.Token()
-              fmt.Println(t.Data)
               if t.Data == "a"{
                   for _,a := range t.Attr{
                       if a.Key == "href"{
                         if(strings.Index(a.Val, uri) == 0){
                           //fmt.Println("Link: ", a.Val)
                           countLinks++
+                          fmt.Println("link found", a.Val)
                           ch <- a.Val
+                          fmt.Println("link pushed in channel", a.Val)
+                          go retrieve(ch)
                           }
                           break;
                       }
@@ -69,9 +72,7 @@ func generatelinks (resp_reader io.Reader, uri string, ch chan string){
 }
 
 func retrieve(ch chan string) {
-
-    select {
-      case uri := <-ch:
+          uri := <-ch
           parsed_url, err := url.Parse(uri)
           if(err != nil){
             fmt.Println("Url Parsing Error: ",err)
@@ -90,11 +91,7 @@ func retrieve(ch chan string) {
           resp_reader := io.TeeReader(resp.Body, fileWriter)
           fmt.Println("file saved successfully")
           generatelinks(resp_reader,uri,ch)
-          retrieve(ch)
-      default:
-          fmt.Println("no message received")
-      }
-
+          defer resp.Body.Close()
 }
 
 
@@ -106,7 +103,9 @@ func main(){
         fmt.Println("Specify a start url")
         os.Exit(1)
      }
-    ch := make(chan string,10000)
+    ch := make(chan string,1)
     ch <- args[0]
-    retrieve(ch)
+    go retrieve(ch)
+    time.Sleep(10000 * time.Millisecond)
+    fmt.Println("**********operation complete***************")
 }
