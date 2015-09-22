@@ -10,10 +10,11 @@ import (
     "golang.org/x/net/html"
     "strings"
     "path/filepath"
-    "time"
+    //"time"
+    "sync"
 )
 
-func createPaths (full_path string) io.Writer{
+func createPaths (full_path string) *os.File{
 
   dir, file := filepath.Split(full_path)
   fmt.Println(full_path)
@@ -28,7 +29,6 @@ func createPaths (full_path string) io.Writer{
     }
   }
   fileWriter, err := os.Create(dir+file)
-
   if(err != nil){
       fmt.Println("File Open Error: ",err)
       os.Exit(1)
@@ -37,7 +37,7 @@ func createPaths (full_path string) io.Writer{
   return fileWriter
 }
 
-func generatelinks (resp_reader io.Reader, uri string, ch chan string){
+func generatelinks (resp_reader io.Reader, uri string, ch chan string,wg *sync.WaitGroup){
   z := html.NewTokenizer(resp_reader)
   fmt.Println("finding links in", uri)
   countLinks := 0
@@ -58,7 +58,8 @@ func generatelinks (resp_reader io.Reader, uri string, ch chan string){
                           fmt.Println("link found", a.Val)
                           ch <- a.Val
                           fmt.Println("link pushed in channel", a.Val)
-                          go retrieve(ch)
+                          wg.Add(1)
+                          go retrieve(ch,wg)
                           }
                           break;
                       }
@@ -71,7 +72,7 @@ func generatelinks (resp_reader io.Reader, uri string, ch chan string){
   fmt.Println("links finding complete", uri)
 }
 
-func retrieve(ch chan string) {
+func retrieve(ch chan string,wg *sync.WaitGroup) {
           uri := <-ch
           parsed_url, err := url.Parse(uri)
           if(err != nil){
@@ -88,10 +89,12 @@ func retrieve(ch chan string) {
           }
           full_path := parsed_url.Host+parsed_url.Path
           fileWriter:= createPaths(full_path)
+          defer fileWriter.Close()
           resp_reader := io.TeeReader(resp.Body, fileWriter)
           fmt.Println("file saved successfully")
-          generatelinks(resp_reader,uri,ch)
+          generatelinks(resp_reader,uri,ch,wg)
           defer resp.Body.Close()
+          defer wg.Done()
 }
 
 
@@ -105,7 +108,10 @@ func main(){
      }
     ch := make(chan string,1)
     ch <- args[0]
-    go retrieve(ch)
-    time.Sleep(10000 * time.Millisecond)
+    var wg sync.WaitGroup
+    wg.Add(1)
+    go retrieve(ch,&wg)
+    wg.Wait()
+    //time.Sleep(10000 * time.Millisecond)
     fmt.Println("**********operation complete***************")
 }
